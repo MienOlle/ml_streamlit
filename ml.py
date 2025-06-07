@@ -381,7 +381,7 @@ def main():
                     min_child_samples=3,
                     colsample_bytree=0.3,
                     random_state=42,
-                    n_jobs=-1,
+                    n_jobs=1,
                     verbose=-1
                 )
                 reg_model = MultiOutputRegressor(lgbm_base)
@@ -398,7 +398,7 @@ def main():
                     min_child_samples=3,
                     colsample_bytree=0.3,
                     random_state=42,
-                    n_jobs=-1,
+                    n_jobs=1,
                     verbose=-1
                 )
                 lgbm_reg = MultiOutputRegressor(lgbm_base)
@@ -416,12 +416,12 @@ def main():
                 clf_model = LGBMClassifier(
                     num_leaves=20,
                     n_estimators=500,
-                    earning_rate=0.1,
+                    learning_rate=0.1,
                     reg_alpha=0.1,
                     min_child_samples=3,
                     colsample_bytree=0.5,
                     random_state=42,
-                    n_jobs=-1
+                    n_jobs=1
                 )
                 
             elif selected_clf_model == "SVM":
@@ -437,7 +437,7 @@ def main():
                     min_child_samples=3,
                     colsample_bytree=0.5,
                     random_state=42,
-                    n_jobs=-1
+                    n_jobs=1
                 )
                 clf_model = VotingClassifier(
                     estimators=[('lr', logR), ('lgbm', lgbm_clf)],
