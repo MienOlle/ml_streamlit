@@ -696,7 +696,7 @@ def main():
         value=st.session_state.input_text,
         placeholder="Type your emotional statement here... (e.g., 'I'm feeling really happy today!')",
         height=100,
-        key="input_text"
+        key="text_input"
     )
     
     if st.button("🎭 Analyze Emotions") and user_text:
