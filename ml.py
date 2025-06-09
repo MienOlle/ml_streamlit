@@ -9,6 +9,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import random
 from sklearn.metrics import classification_report, accuracy_score, f1_score
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -113,6 +114,7 @@ def clean_text(text):
     return text
 
 # load datasets
+# Replace your load_datasets function with this:
 @st.cache_data
 def load_datasets():
     """Load your real datasets"""
@@ -121,35 +123,123 @@ def load_datasets():
         test = pd.read_csv('test.csv', delimiter='\t')
         dev = pd.read_csv('dev.csv', delimiter='\t')
         
-        # dsiplay data detail sedikit
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Train Set", f"{len(train)} samples")
-        with col2:
-            st.metric("Test Set", f"{len(test)} samples")
-        with col3:
-            st.metric("Dev Set", f"{len(dev)} samples")
-        
-        # combine dtasets
+        # combine datasets
         combined_df = pd.concat([train, dev, test], ignore_index=True)
         
-        # preview combined
-        with st.expander("📊 Data Preview"):
-            st.write("**Combined Dataset Columns:**", list(combined_df.columns))
-            st.write("**First 5 rows:**")
-            st.dataframe(combined_df.head())
-            st.write("**Dataset Shape:**", combined_df.shape)
-        
-        return combined_df
+        return combined_df, len(train), len(test), len(dev)
         
     except FileNotFoundError as e:
         st.error(f"❌ Dataset files not found: {str(e)}")
         st.error("Please ensure these files are in the same directory as your app:")
         st.code("- train.csv\n- test.csv\n- dev.csv")
-        return None
+        return None, 0, 0, 0
     except Exception as e:
         st.error(f"❌ Error loading datasets: {str(e)}")
-        return None
+        return None, 0, 0, 0
+
+# Add this new function for EDA:
+def show_eda(combined_df):
+    """Show EDA section"""
+    # EDA Section
+    with st.expander("📈 Data Analysis & Visualization"):
+        analysis_option = st.selectbox(
+            "Choose Analysis Type:",
+            [
+                "Emotion Distribution Chart", 
+                "Sample High & Low Intensity Emotions"
+            ],
+            help="Select the type of analysis you want to perform on your data"
+        )
+        
+        if analysis_option == "Emotion Distribution Chart":
+            st.write("### 📊 Emotion Distribution in Dataset")
+            
+            # Check if emotion columns exist
+            emotion_cols = ["joy", "sadness", "anger", "fear"]
+            missing_emotion_cols = [col for col in emotion_cols if col not in combined_df.columns]
+            if missing_emotion_cols:
+                st.error(f"❌ Missing emotion columns: {missing_emotion_cols}")
+            else:
+                try:
+                    # Count emotions where value > 0
+                    emotion_counts = (combined_df[emotion_cols] > 0).sum()
+                    
+                    # Create the plot
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    
+                    # Create bar plot
+                    bars = ax.bar(emotion_counts.index, emotion_counts.values, 
+                                 color=['#ff9999', '#66b3ff', '#99ff99', '#ffcc99'])
+                    
+                    # Add count labels on bars
+                    for i, (emotion, count) in enumerate(emotion_counts.items()):
+                        ax.text(i, count, str(count), ha="center", va="bottom", fontweight='bold')
+                    
+                    # Customize plot
+                    ax.set_title('Emotion Distribution', fontsize=16, fontweight='bold')
+                    ax.set_xlabel('Emotion', fontsize=12)
+                    ax.set_ylabel('Count', fontsize=12)
+                    plt.xticks(rotation=45)
+                    plt.tight_layout()
+                    
+                    # Display plot
+                    st.pyplot(fig)
+                    
+                    # Show statistics
+                    st.write("**📋 Emotion Statistics:**")
+                    stats_df = pd.DataFrame({
+                        'Emotion': emotion_counts.index,
+                        'Count': emotion_counts.values,
+                        'Percentage': (emotion_counts.values / len(combined_df) * 100).round(2)
+                    })
+                    st.dataframe(stats_df, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"Error creating emotion distribution chart: {str(e)}")
+        
+        elif analysis_option == "Sample High & Low Intensity Emotions":
+            st.write("### 🎯 Sample High & Low Intensity Emotions")
+            
+            # Configuration
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                high_threshold = st.slider("High Intensity Threshold", 0.5, 1.0, 0.9, 0.1)
+            with col2:
+                low_threshold = st.slider("Low Intensity Threshold", 0.0, 0.5, 0.1, 0.1)
+            with col3:
+                sample_size = st.slider("Sample Size per Category", 1, 10, 3)
+            
+            # Show samples for each emotion
+            emotion_cols = ["joy", "sadness", "anger", "fear"]
+            for emotion in emotion_cols:
+                if emotion in combined_df.columns:
+                    st.write(f"**🔥 {emotion.upper()}**")
+                    
+                    # High intensity samples
+                    high_data = combined_df[combined_df[emotion] >= high_threshold]
+                    st.write(f"**High Intensity (≥ {high_threshold}):**")
+                    if len(high_data) > 0:
+                        high = high_data.sample(n=min(sample_size, len(high_data)))
+                        for i, (idx, row) in enumerate(high.iterrows(), 1):
+                            intensity = row[emotion]
+                            text = row.get('Tweet', 'No text found')
+                            st.write(f"   {i}. ({intensity:.2f}) {text}")
+                    else:
+                        st.write("   - No samples found with this threshold")
+                    
+                    # Low intensity samples
+                    low_data = combined_df[(combined_df[emotion] < low_threshold) & (combined_df[emotion] > 0)]
+                    st.write(f"**Low Intensity (> 0 and < {low_threshold}):**")
+                    if len(low_data) > 0:
+                        low = low_data.sample(n=min(sample_size, len(low_data)))
+                        for i, (idx, row) in enumerate(low.iterrows(), 1):
+                            intensity = row[emotion]
+                            text = row.get('Tweet', 'No text found')
+                            st.write(f"   {i}. ({intensity:.2f}) {text}")
+                    else:
+                        st.write("   - No samples found with this threshold")
+                    
+                    st.write("---")
 
 # lexicon
 @st.cache_data
@@ -261,20 +351,46 @@ class EnsembleRegressor(BaseEstimator, RegressorMixin):
         pred2 = self.model2.predict(X)
         return self.alpha * pred1 + (1 - self.alpha) * pred2
 
+class ClippedMultiOutputRegressor(MultiOutputRegressor):
+    def predict(self,X):
+        preds=super().predict(X)
+        return np.clip(preds,0,1)
+
 # main
 def main():
-    # load datasset by calling the function abovee
-    combined_df = load_datasets()
-    if combined_df is None:
+    # load dataset by calling the function above
+    data_result = load_datasets()
+    if data_result[0] is None:
         st.stop()
     
-    # laodf lexicons juga
+    combined_df, train_len, test_len, dev_len = data_result
+    
+    # load lexicons juga
     lexicons = load_lexicons()
     
     # define emotion columns
     emotion_cols = ["joy", "sadness", "anger", "fear"]
     
-    # display daata
+    # display data metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Train Set", f"{train_len} samples")
+    with col2:
+        st.metric("Test Set", f"{test_len} samples")
+    with col3:
+        st.metric("Dev Set", f"{dev_len} samples")
+    
+    # preview combined
+    with st.expander("📊 Data Preview"):
+        st.write("**Combined Dataset Columns:**", list(combined_df.columns))
+        st.write("**First 5 rows:**")
+        st.dataframe(combined_df.head())
+        st.write("**Dataset Shape:**", combined_df.shape)
+    
+    # Show EDA (outside cached function)
+    show_eda(combined_df)
+    
+    # display data
     st.subheader("📊 Dataset Information")
     col1, col2 = st.columns(2)
     with col1:
@@ -289,7 +405,7 @@ def main():
                 st.write(f"- ✅ {col.title()}")
             else:
                 st.write(f"- ❌ {col.title()} (missing)")
-    
+
     missing_cols = [col for col in ['Tweet'] + emotion_cols if col not in combined_df.columns]
     if missing_cols:
         st.error(f"❌ Missing required columns: {missing_cols}")
@@ -370,7 +486,7 @@ def main():
             # train regress based on selection
             if selected_reg_model == "Ridge":
                 ridge = Ridge(alpha=1.0, solver='lsqr', random_state=42)
-                reg_model = MultiOutputRegressor(ridge)
+                reg_model = ClippedMultiOutputRegressor(ridge)
                 
             elif selected_reg_model == "LightGBM" and LIGHTGBM_AVAILABLE:
                 lgbm_base = LGBMRegressor(
@@ -384,11 +500,11 @@ def main():
                     n_jobs=1,
                     verbose=-1
                 )
-                reg_model = MultiOutputRegressor(lgbm_base)
+                reg_model = ClippedMultiOutputRegressor(lgbm_base)
                 
             elif "Ensemble" in selected_reg_model and LIGHTGBM_AVAILABLE:
                 ridge = Ridge(alpha=1.0, solver='lsqr', random_state=42)
-                ridge_reg = MultiOutputRegressor(ridge)
+                ridge_reg = ClippedMultiOutputRegressor(ridge)
                 
                 lgbm_base = LGBMRegressor(
                     num_leaves=20,
@@ -401,7 +517,7 @@ def main():
                     n_jobs=1,
                     verbose=-1
                 )
-                lgbm_reg = MultiOutputRegressor(lgbm_base)
+                lgbm_reg = ClippedMultiOutputRegressor(lgbm_base)
                 
                 reg_model = EnsembleRegressor(model1=ridge_reg, model2=lgbm_reg, alpha=alpha)
             
@@ -461,7 +577,84 @@ def main():
             # results
             st.success("✅ Models trained successfully!")
             
-            # metrics regres
+            # Create visualization plots
+            st.subheader("📊 Model Performance Visualizations")
+            
+            # Regression plots
+            with st.expander("📈 Regression Model Plots", expanded=True):
+                # True vs Predicted scatter plots for each emotion
+                fig_reg, axes = plt.subplots(2, 2, figsize=(12, 10))
+                axes = axes.flatten()
+
+                pearson_scores = []
+                
+                for i, emotion in enumerate(emotion_cols):
+                    y_true_emotion = y_test_reg[:, i]
+                    y_pred_emotion = y_pred_reg[:, i]
+                    
+                    # Scatter plot
+                    axes[i].scatter(y_true_emotion, y_pred_emotion, alpha=0.6, color=['#ff9999', '#66b3ff', '#99ff99', '#ffcc99'][i])
+                    
+                    # Perfect prediction line
+                    min_val = min(y_true_emotion.min(), y_pred_emotion.min())
+                    max_val = max(y_true_emotion.max(), y_pred_emotion.max())
+                    axes[i].plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, alpha=0.8)
+                    
+                    # Calculate R² and Pearson
+                    r2 = r2_score(y_true_emotion, y_pred_emotion)
+                    corr, _ = pearsonr(y_true_emotion, y_pred_emotion)
+                    pearson_scores.append(corr)
+
+                    axes[i].set_title(f'{emotion.title()} (R² = {r2:.3f})')
+                    axes[i].set_xlabel('True Intensity')
+                    axes[i].set_ylabel('Predicted Intensity')
+                    axes[i].grid(True, alpha=0.3)
+                
+                plt.suptitle(f'Regression Results - {selected_reg_model}', fontsize=16, fontweight='bold')
+                plt.tight_layout()
+                st.pyplot(fig_reg)
+                
+                # Flattened comparison plot (like in your image)
+                y_true_flat = y_test_reg.flatten()
+                y_pred_flat = y_pred_reg.flatten()
+                
+                fig_flat, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharey=True)
+                
+                # True Intensities
+                ax1.plot(y_true_flat, color='tab:blue')
+                ax1.set_title('True Emotion Intensities')
+                ax1.grid(True, alpha=0.3)
+                
+                # Predicted Intensities
+                ax2.plot(y_pred_flat, color='tab:orange')
+                ax2.set_title('Predicted Emotion Intensities')
+                ax2.set_xlabel('Text Index')
+                ax2.grid(True, alpha=0.3)
+
+                fig_flat.text(0.04, 0.5, "Frequency", va="center", rotation="vertical")
+                
+                # Average Pearson
+                average_pearson = np.mean(pearson_scores)
+                plt.suptitle(f"Regression Trend - {selected_reg_model} (Pearson: {average_pearson:.3f})")
+                plt.tight_layout(rect=[0.05, 0.05, 1, 1])
+                st.pyplot(fig_flat)
+            
+            # Classification plots
+            with st.expander("🎯 Classification Model Plots", expanded=True):
+                # Confusion Matrix
+                from sklearn.metrics import confusion_matrix
+                cm = confusion_matrix(y_test_cls, y_pred_cls)
+                
+                fig_cm, ax = plt.subplots(figsize=(8, 6))
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                           xticklabels=emotion_cols, yticklabels=emotion_cols, ax=ax)
+                ax.set_xlabel('Predicted Label')
+                ax.set_ylabel('True Label')
+                ax.set_title(f'Confusion Matrix - {selected_clf_model}')
+                plt.tight_layout()
+                st.pyplot(fig_cm)
+            
+            # metrics regres (keep existing table)
             st.subheader("📈 Regression Model Performance")
             reg_metrics = []
             for i, emotion in enumerate(emotion_cols):
@@ -479,7 +672,7 @@ def main():
             
             st.dataframe(pd.DataFrame(reg_metrics), use_container_width=True)
             
-            # metrics classif
+            # metrics classif (keep existing table)
             st.subheader("🎯 Classification Model Performance")
             accuracy = accuracy_score(y_test_cls, y_pred_cls)
             st.metric("Overall Accuracy", f"{accuracy:.3f}")
@@ -503,15 +696,8 @@ def main():
         value=st.session_state.input_text,
         placeholder="Type your emotional statement here... (e.g., 'I'm feeling really happy today!')",
         height=100,
-        key="text_input"
+        key="input_text"
     )
-    
-    # clear button d text box
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if st.button("🗑️ Clear Text"):
-            st.session_state.input_text = ""
-            st.rerun()
     
     if st.button("🎭 Analyze Emotions") and user_text:
         if not hasattr(st.session_state, 'models_trained') or not st.session_state.models_trained:
